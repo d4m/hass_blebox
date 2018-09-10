@@ -12,6 +12,7 @@ switch:
 ```
 __Configuration variables:__
 * __host__ (*Required*): The IP address of your switchBox(D), eg. 192.168.1.32
+* __type__ (*Optional*): The device type (switchBox or switchBoxD). If not set, will be detected automatically
 * __name__ (*Optional*): The name to use when displaying this switch. If not set, will be used relay name from the device
 * __relay__ (*Optional*): The number of the relay. Default is 0, for switchBoxD you can set 0 or 1
 
