@@ -75,20 +75,34 @@ class BleboxDimmerBox(Light):
     @asyncio.coroutine
     def async_device_init(self, hass):
         device_info = yield from self.async_update_device_info(hass)
+        dimmer_state = yield from self.async_update_dimmer_state(hass)
 
         if not self._name:
-            self._name = device_info['device']['deviceName'] if device_info else DEFAULT_NAME
+            self._name = device_info['deviceName'] if device_info else DEFAULT_NAME
 
         return device_info
-
+        
     @asyncio.coroutine
     def async_update_device_info(self, hass):
 
         device_info = None
 
         try:
-            device_info = yield from self.get_device_info(hass)
-            current_brightness = device_info['dimmer']['desiredBrightness']
+            device_info = yield from self.get_device_state(hass)
+            self._available = True
+        except:
+            self._available = False
+
+        return device_info
+        
+    @asyncio.coroutine
+    def async_update_dimmer_state(self, hass):
+
+        dimmer_state = None
+
+        try:
+            dimmer_state = yield from self.get_dimmer_state(hass)
+            current_brightness = dimmer_state['desiredBrightness']
             self._available = True
         except:
             current_brightness = 0
@@ -100,11 +114,12 @@ class BleboxDimmerBox(Light):
         else:
             self.state = False
 
-        return device_info
+        return dimmer_state
 
     @asyncio.coroutine
     def async_update(self):
         yield from self.async_update_device_info(self.hass)
+        yield from self.async_update_dimmer_state(self.hass)
 
     @asyncio.coroutine
     def async_turn_on(self, **kwargs):
@@ -120,8 +135,8 @@ class BleboxDimmerBox(Light):
     @asyncio.coroutine
     def set_device_brightness(self, brightness):
         websession = async_get_clientsession(self.hass)
-        resource = 'http://%s/api/dimmer/set/' % self._host
-        payload = '{"dimmer": {"desiredBrightness": "%s"}}' % brightness
+        resource = 'http://%s/api/dimmer/set' % self._host
+        payload = '{"dimmer": {"desiredBrightness": %s}}' % brightness
 
         try:
             with async_timeout.timeout(self._timeout, loop=self.hass.loop):
@@ -132,7 +147,7 @@ class BleboxDimmerBox(Light):
             return None
 
     @asyncio.coroutine
-    def get_device_info(self, hass):
+    def get_device_state(self, hass):
         websession = async_get_clientsession(hass)
         resource = 'http://%s/api/device/state' % self._host
 
@@ -140,8 +155,23 @@ class BleboxDimmerBox(Light):
             with async_timeout.timeout(self._timeout, loop=hass.loop):
                 req = yield from websession.get(resource)
                 text = yield from req.text()
-                device_info = json.loads(text)
+                device_state = json.loads(text)
                 device = device_info['device']
-                return device_info
+                return device
+        except:
+            return None
+            
+    @asyncio.coroutine
+    def get_dimmer_state(self, hass):
+        websession = async_get_clientsession(hass)
+        resource = 'http://%s/api/dimmer/state' % self._host
+
+        try:
+            with async_timeout.timeout(self._timeout, loop=hass.loop):
+                req = yield from websession.get(resource)
+                text = yield from req.text()
+                dimmer_state = json.loads(text)
+                dimmer = dimmer_state['dimmer']
+                return dimmer
         except:
             return None
