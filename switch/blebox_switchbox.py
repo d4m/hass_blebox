@@ -65,10 +65,10 @@ class BleboxSwitchBoxSwitch(SwitchDevice):
 
     def __init__(self, host, relay = DEFAULT_RELAY, timeout = DEFAULT_TIMEOUT):
         self._name = 'Blebox %s' % self._type
-        self._state = 0
         self._host = host
         self._relay = relay
         self._timeout = timeout
+        self._state = None
         self._available = False
 
     @property
@@ -80,16 +80,8 @@ class BleboxSwitchBoxSwitch(SwitchDevice):
         return self._name
 
     @property
-    def state(self):
-        return self._state
-
-    @state.setter
-    def state(self, state):
-        self._state = STATE_ON if state else STATE_OFF
-
-    @property
     def is_on(self):
-        return self._state == STATE_ON
+        return self._state
 
     @asyncio.coroutine
     def async_turn_on(self, **kwargs):
@@ -104,10 +96,10 @@ class BleboxSwitchBoxSwitch(SwitchDevice):
         relay_info = yield from self.get_relay_info()
 
         if relay_info:
-            self.state = relay_info['state']
+            self._state = bool(relay_info['state'])
             self._available = True
         else:
-            self.state = 0
+            self._state = None
             self._available = False
 
         return relay_info
@@ -123,8 +115,26 @@ class BleboxSwitchBoxSwitch(SwitchDevice):
             except:
                 ...
 
+    @asyncio.coroutine
+    def get_device_info(self, hass = None):
+        if not hass:
+            hass = self.hass
+
+        websession = async_get_clientsession(hass)
+        resource = 'http://%s/api/device/state' % self._host
+
+        try:
+            with async_timeout.timeout(self._timeout, loop=hass.loop):
+                req = yield from websession.get(resource)
+                text = yield from req.text()
+                device_info = json.loads(text)
+                return device_info['device']
+        except:
+            return None
+
 class BleboxSwitchBox(BleboxSwitchBoxSwitch):
     _type = 'switchBox'
+    _device_name = None
 
     @asyncio.coroutine
     def set_relay_state(self, state):
@@ -147,15 +157,19 @@ class BleboxSwitchBox(BleboxSwitchBoxSwitch):
             hass = self.hass
 
         websession = async_get_clientsession(hass)
-        resource = 'http://%s/api/device/state' % self._host
+        resource = 'http://%s/api/relay/state' % self._host
 
         try:
+            if not self._device_name:
+                device_info = yield from self.get_device_info()
+                self._device_name = device_info['deviceName']
+
             with async_timeout.timeout(self._timeout, loop=hass.loop):
                 req = yield from websession.get(resource)
                 text = yield from req.text()
                 info = json.loads(text)
-                relay_info = info['relays'][0]
-                relay_info['name'] = info['device']['deviceName']
+                relay_info = info[0]
+                relay_info['name'] = self._device_name
                 return relay_info
         except:
             return None
